@@ -79,7 +79,7 @@ namespace mysys{
 					dir_[i] = NULL;
 				}
 			}
-
+			//剩余目录项
 			int freeEntity(){
 				if(curr == 10)
 					return -1; 
@@ -98,10 +98,11 @@ namespace mysys{
 			int currUser; //当前用户，-1表示没有登录
 			fileNode* list[10]; //最大文件节点打开数：10
 			myDir* curr;	//当前目录
-			fileNode* currINode;
+			fileNode* currINode; //当前目录节点
+			int currINodeNo;
 			bool fblock[40]; //模拟磁盘块
 			bool iblock[100];	//模拟inode块
-
+			//清空当前块信息，以便初始化
 			void clearblock(){
 				for(int i = 0; i < 40; ++i){
 					fblock[i] = false;
@@ -109,8 +110,10 @@ namespace mysys{
 				for(int i = 0; i < 100; ++i){
 					iblock[i] = false;
 				}
+				for(int i=0; i < 10; ++i)
+					list[i] = NULL;
 			}
-
+			//读入根目录信息
 			void loadRoot(){	
 				fileNode* a = new fileNode();
 				myDir* b = new myDir();
@@ -183,8 +186,9 @@ namespace mysys{
 				}
 				this->curr = b;
 				this->currINode = a;
+				currINodeNo = 0;
 			}
-
+			//读入磁盘使用情况
 			void loadBlock(){
 				if( access("block",F_OK)!=-1){
 					printf("\nload block\n");
@@ -205,7 +209,7 @@ namespace mysys{
 					close(fd);
 				}
 			}
-
+			//将新磁盘使用信息写回磁盘
 			void writeBlock(){
 				//模拟磁盘管理
 				int fd = open("block",O_WRONLY);
@@ -214,7 +218,7 @@ namespace mysys{
 				write(fd,(void *)(iblock),sizeof(iblock));
 				close(fd);
 			}
-
+			//将目录信息写回磁盘
 			void writeDir(){
 				int p = currINode->pos;
 				char a[6] = "file";
@@ -242,7 +246,7 @@ namespace mysys{
 				}
 				close(fd);
 			}
-
+			//空余磁盘
 			int freeFBlock(){
 				for(int i= 0; i < 40;++i){
 					if(!fblock[i])
@@ -250,7 +254,7 @@ namespace mysys{
 				}
 				return -1;
 			}
-
+			//空余inode区域
 			int freeIBlock(){
 				for(int i= 0; i < 100;++i){
 					if(!fblock[i])
@@ -258,15 +262,15 @@ namespace mysys{
 				}
 				return -1;
 			}
-
+			//空余描述符
 			int freeFd(){
 				for(int i =0; i < 10; ++i){
-					if(list[i]!=NULL)
+					if(list[i]==NULL)
 						return i;
 				}
 				return -1;
 			}
-
+			//登录
 			int login(char un[256],char passwd[256]){
 				int fd = open("user",S_IRWXU);
 				char na[256];
@@ -296,7 +300,7 @@ namespace mysys{
 					return -1;
 				}
 			}
-
+			//注册
 			int signup(char na[256],char pa[256]){
 				int fd = open("user",O_WRONLY);
 				write(fd,na,sizeof(na));
@@ -304,12 +308,38 @@ namespace mysys{
 				write(fd,pa,sizeof(pa));
 				close(fd);
 			}
-
+			//是否有人注册
 			bool empty(){
 				if(access("user",F_OK)!=-1)
 					return false;
 				else
 					return true;
+			}
+
+			//格式化文件信息
+			void fomattedFileInfo(int inode){
+				char i[8] = "inode";
+				char q[3] ="";
+				sprintf(q,"%d",inode);
+				strcat(i,q);
+				int fd = open(i,O_RDONLY);
+				fileNode a;
+				read(fd,&(a.uid),sizeof(int));
+				lseek(fd,sizeof(int),SEEK_CUR);
+				read(fd,&(a.length),sizeof(int));
+				lseek(fd,sizeof(int),SEEK_CUR);
+				read(fd,&(a.mode),sizeof(short));
+				lseek(fd,sizeof(short),SEEK_CUR);
+				read(fd,&(a.pos),sizeof(int));
+				lseek(fd,sizeof(int),SEEK_CUR);//文件指针移动到文件末尾
+				close(fd);
+				printf(" ");
+				printf("file%d  ",a.pos);
+				char w[11];
+				w[10] = '\0';
+				a.fomattedMod(w);
+				printf("%s",w);
+				printf("  %d\n",a.length);
 			}
 
 		public:
@@ -322,28 +352,32 @@ namespace mysys{
 			}
 
 			~myFileSys(){
-				writeBlock();
+				for(int i = 0; i < 10; ++i){
+					if(list[i]!= NULL){
+						delete list[i];
+					}
+				}
+				delete currINode;
+				delete curr;
 			}
-	
+			
 			int create_(const char* pathname,int mode){
-				printf("\n%s\n","what?");
-				bool err = false;
 				int freefd = freeFd();
 				//文件描述符已达上限
 				if(freefd == -1){
-					printf("\n%d\n",freefd);
+					printf("\nfd %d\n",freefd);
 					return -1;
 				}
 				//没有足够空间可以分配给inode
 				int freeinode = freeIBlock();
 				if(freeinode == -1){
-					printf("\n%d\n",freeinode);
+					printf("\ninode %d\n",freeinode);
 					return -1;
 				}
 				//磁盘空间不足
 				int freeblock = freeFBlock(); 
 				if(freeblock == -1){
-					printf("\n%d\n",freeblock);
+					printf("\nblock %d\n",freeblock);
 					return -1;
 				}
 				fileNode* a = new fileNode();
@@ -364,6 +398,8 @@ namespace mysys{
 					case 2:
 						a->mode = 0x084;
 						break;
+					case 0:
+						break;
 					default:
 						delete a;
 						delete b;
@@ -373,16 +409,16 @@ namespace mysys{
 				//目录项剩余
 				int e = 0;
 				if( (e = curr->freeEntity()) != -1){
-					printf("\n%s\n","left entity");
 					curr->dir_[e] = b;
 					char i[9] = "inode";
 					char h[3];
 					sprintf(h,"%d",freeinode);
 					strcat(i,h);
-					printf("\n%s\n",i);
 					int fd = creat(i,S_IRWXU);
-					if(fd == -1)
-						err = true;
+					if(fd == -1){
+						printf("\n%s\n","create fail");
+						return -1;
+					}
 					write(fd,&(a->uid),sizeof(int));
 					lseek(fd,sizeof(int),SEEK_CUR);
 					write(fd,&(a->length),sizeof(int));
@@ -397,12 +433,13 @@ namespace mysys{
 					char g[2];
 					sprintf(g,"%d",freeblock);
 					strcat(f,g);
-					printf("\n%s\n",f);
 					int fd_ = creat(f,S_IRWXU);
 					if(fd_ == -1){
 						printf("\n%s\n","create fail");
 						return -1;
 					}
+					//写入目录项信息
+
 					fblock[freeblock] = true;
 					iblock[freeinode] = true;
 					this->list[freefd] = a;
@@ -413,10 +450,19 @@ namespace mysys{
 				}
 				//目录项空间不足，现不考虑在next拼接
 				else{
-					printf("\n%d\n",e);
+					printf("\n%d next d\n",e);
 					delete a;
 					delete b;
 					return -1;
+				}
+			}
+
+			void dir_(){
+				for(int i = 0; i < 10; i++){
+					if(curr->dir_[i] != NULL){
+						printf("%s",curr->dir_[i]->name);
+						fomattedFileInfo(curr->dir_[i]->inode);
+					}
 				}
 			}
 
@@ -426,7 +472,7 @@ namespace mysys{
 
 			int read_(int fd,char* buff,int length){
 
-			}
+			}	
 
 			int delete_(char pathnamep[256]){
 
@@ -440,12 +486,156 @@ namespace mysys{
 
 			}
 
-			int mkdir_(char pathname[256]){
+			int mkdir_(const char* pathname){
+				int freeinode = freeIBlock();
+				if(freeinode == -1){
+					printf("\ninode %d\n",freeinode);
+					return -1;
+				}
+				//磁盘空间不足
+				int freeblock = freeFBlock(); 
+				if(freeblock == -1){
+					printf("\n%d\n",freeblock);
+					return -1;
+				}
+				fileNode* a = new fileNode();
+				dirNode* b = new dirNode();
+				a->pos = freeblock;
+				a->uid = currUser;
+				a->length = 0;
+				strcpy(b->name,pathname);
+				b->type = 1;
+				b->inode = freeinode;
+				a->mode = 0x384;
+				int e = 0;
+				if( (e = curr->freeEntity()) != -1){
+					curr->dir_[e] = b;
+					char i[9] = "inode";
+					char h[3];
+					sprintf(h,"%d",freeinode);
+					strcat(i,h);
+					int fd = creat(i,S_IRWXU);
+					if(fd == -1){
+						printf("\n%s\n","create fail");
+						return -1;
+					}
+					a->length =sizeof(int)* 3 + sizeof(b->name);
+					write(fd,&(a->uid),sizeof(int));
+					lseek(fd,sizeof(int),SEEK_CUR);
+					write(fd,&(a->length),sizeof(int));
+					lseek(fd,sizeof(int),SEEK_CUR);
+					write(fd,&(a->mode),sizeof(short));
+					lseek(fd,sizeof(short),SEEK_CUR);
+					write(fd,&(a->pos),sizeof(int));
+					lseek(fd,sizeof(int),SEEK_CUR);
+					close(fd);
 
+					char f[8] = "file";
+					char g[2];
+					sprintf(g,"%d",freeblock);
+					strcat(f,g);
+					int fd_ = creat(f,S_IRWXU);
+					if(fd_ == -1){
+						printf("\n%s\n","create fail");
+						return -1;
+					}
+					//写入磁盘信息
+					myDir* c = new myDir();
+					c->parent = currINode->pos;
+					strcpy(c->name,pathname);
+					write(fd_,c->name,sizeof(c->name));
+					lseek(fd_,sizeof(c->name),SEEK_CUR);
+					write(fd_,&(c->curr),sizeof(int));
+					lseek(fd_,sizeof(int),SEEK_CUR);
+					write(fd_,&(c->next),sizeof(int));
+					lseek(fd_,sizeof(int),SEEK_CUR);
+					write(fd_,&(c->parent),sizeof(int));
+					lseek(fd_,sizeof(int),SEEK_CUR);
+					close(fd_);
+					delete c;
+					fblock[freeblock] = true;
+					iblock[freeinode] = true;
+					curr->curr++;
+					writeDir();
+					writeBlock();
+					return 1;
+				}
+				//目录项空间不足，现不考虑在next拼接
+				else{
+					printf("\nentity %d\n",e);
+					delete a;
+					delete b;
+					return -1;
+				}
 			}
 
-			int cd_(char pathname[256]){
+			int cd_(const char* pathname){
+				//迭代比较
+				for(int i = 0; i < 10; ++i){
+					if(curr->dir_[i] != NULL){
+						//匹配
+						if(strcmp(pathname,curr->dir_[i]->name)==0){
+							//并且是目录
+							if(curr->dir_[i]->type == 1){
+								myDir* a = new myDir();
+								fileNode* b = new fileNode();
+								int p = curr->dir_[i]->inode;	
+								char c[7] = "inode";
+								char d[3] = "";
+								sprintf(d,"%d",p);
+								strcat(c,d);	
+								int fd = open(c,O_RDONLY);
+								read(fd,&(b->uid),sizeof(int));
+								lseek(fd,sizeof(int),SEEK_CUR);
+								read(fd,&(b->length),sizeof(int));
+								lseek(fd,sizeof(int),SEEK_CUR);
+								read(fd,&(b->mode),sizeof(short));
+								lseek(fd,sizeof(short),SEEK_CUR);
+								read(fd,&(b->pos),sizeof(int));
+								lseek(fd,sizeof(int),SEEK_CUR);
+								close(fd);
+							
 
+								char e[8] = "file";
+								char f[2] = "";
+								sprintf(f,"%d",b->pos);
+								strcat(e,f);
+								int fd_ = open(e,O_RDONLY);
+								read(fd_,a->name,sizeof(a->name));
+								lseek(fd_,sizeof(a->name),SEEK_CUR);
+								read(fd_,&(a->curr),sizeof(int));
+								lseek(fd_,sizeof(int),SEEK_CUR);
+								read(fd_,&(a->next),sizeof(int));
+								lseek(fd_,sizeof(int),SEEK_CUR);
+								read(fd_,&(a->parent),sizeof(int));
+								lseek(fd_,sizeof(int),SEEK_CUR);
+								//读取目录项
+								for(int i=0; i < a->curr; i++){
+									a->dir_[i] = new dirNode();
+									read(fd_,&(a->dir_[i]->inode),sizeof(int));
+									lseek(fd_,sizeof(int),SEEK_CUR);
+									read(fd_,(a->dir_[i]->name),sizeof(a->dir_[i]->name));
+									lseek(fd_,sizeof(int),SEEK_CUR);
+									read(fd_,&(a->dir_[i]->type),sizeof(int));
+									lseek(fd_,sizeof(int),SEEK_CUR);
+								}
+								close(fd_);
+								delete curr;
+								delete currINode;
+								curr = a;
+								currINode  = b;
+								currINodeNo = p;
+								
+								return 1;
+							}
+							else{
+								printf("\nworng type");
+								return -1;
+							}
+						}
+					}
+				}
+				return -1;
 			}
 	};
 	#endif
