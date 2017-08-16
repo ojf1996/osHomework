@@ -4,6 +4,7 @@
 #include <fcntl.h>  
 #include <stdio.h>
 #include <cstring>
+#include <errno.h> 
 #include <string.h>
 #include <stdlib.h>
 #include <iostream>
@@ -306,7 +307,7 @@ namespace mysys{
 				w[10] = '\0';
 				a.fomattedMod(w);
 				printf("%s",w);
-				printf("  %d\n",a.length);
+				printf("  %d",a.length);
 			}
 
 		public:
@@ -355,23 +356,45 @@ namespace mysys{
 				strcpy(b->name,pathname);
 				b->type = 2;
 				b->inode = freeinode;
-				switch(mode){
-					case 6:
-						a->mode = 0x180;
-						break;
-					case 4:
-						a->mode = 0x100;
-						break;
-					case 2:
-						a->mode = 0x080;
-						break;
-					case 0:
-						break;
-					default:
-						delete a;
-						delete b;
-						printf("未知权限");
-						return -1;
+				if(currUser != -1){
+					switch(mode){
+						case 6:
+							a->mode = 0x180;
+							break;
+						case 4:
+							a->mode = 0x100;
+							break;
+						case 2:
+							a->mode = 0x080;
+							break;
+						case 0:
+							break;
+						default:
+							delete a;
+							delete b;
+							printf("未知权限");
+							return -1;
+					}
+				}
+				else{
+					switch(mode){
+						case 6:
+							a->mode = 0x006;
+							break;
+						case 4:
+							a->mode = 0x004;
+							break;
+						case 2:
+							a->mode = 0x002;
+							break;
+						case 0:
+							break;
+						default:
+							delete a;
+							delete b;
+							printf("未知权限");
+							return -1;
+					}
 				}
 				//目录项剩余
 				int e = 0;
@@ -405,8 +428,7 @@ namespace mysys{
 						printf("\n%s\n","create fail");
 						return -1;
 					}
-					//写入目录项信息
-
+					close(fd_);
 					fblock[freeblock] = true;
 					iblock[freeinode] = true;
 					this->list[freefd] = a;
@@ -428,26 +450,45 @@ namespace mysys{
 			void dir_(){
 				for(int i = 0; i < 10; i++){
 					if(curr->dir_[i] != NULL){
-						printf("%s",curr->dir_[i]->name);
+						printf("\n%s",curr->dir_[i]->name);
 						fomattedFileInfo(curr->dir_[i]->inode);
 					}
 				}
 			}
 
-			int myWrite(int fd,const char* buff,int offset,int length){
-				if(list[fd]!=NULL ){
-					if((currUser == list[fd]->uid ) && (list[fd]->mode)&0x080){
-						char c[7] = "file";
+			int write_(int fd,const char* buff,int offset,int length){
+				if( list[fd]!=NULL){
+					if(currUser != -1){
+						if( (currUser == list[fd]->uid ) && (list[fd]->mode)&0x080){
+							char c[9] = "file";
+							char d[3] = "";
+							sprintf(d,"%d",list[fd]->pos);
+							strcat(c,d);
+							int fd_ = open(c,O_WRONLY);
+							int i = -1;
+							lseek(fd_,offset,SEEK_SET);
+							i = write(fd_,buff,length); 
+							close(fd_);
+							struct stat buf;  
+							stat(c, &buf);  
+							list[fd]->length = buf.st_size;
+							return i;
+						}
+					}
+					else if((list[fd]->mode)&0x002){
+						char c[9] = "file";
 						char d[3] = "";
 						sprintf(d,"%d",list[fd]->pos);
-						strcat(c,d);	
-						int fd = open(c,O_RDONLY);
-						lseek(fd,offset,SEEK_SET);
-						struct stat statbuf;  
-						stat(c,&statbuf);  
-						int size=statbuf.st_size;
-						list[fd]->length = size;
-						return write(fd,buff,length); 
+						strcat(c,d);
+						int fd_ = open(c,O_WRONLY);
+						int i = -1;
+						lseek(fd_,offset,SEEK_SET);
+						i = write(fd_,buff,length); 
+						close(fd_);
+						struct stat buf;  
+						stat(c, &buf);  
+						list[fd]->length = buf.st_size;
+						return i;
 					}
 					else{
 						printf("\nnot enough right\n");
@@ -459,31 +500,93 @@ namespace mysys{
 					return -1;
 				}
 			}
-
 			int read_(int fd,char* buff,int offset,int length){
-				if( (currUser == list[fd]->uid ) && (list[fd]->mode)&0x100){
-					if(list[fd]!=NULL){
-						char c[7] = "file";
+				if( list[fd]!=NULL){
+					if(currUser != -1){
+						if( (currUser == list[fd]->uid ) && (list[fd]->mode)&0x080){
+							char c[9] = "file";
+							char d[3] = "";
+							sprintf(d,"%d",list[fd]->pos);
+							strcat(c,d);
+							int fd_ = open(c,O_WRONLY);
+							int i = -1;
+							lseek(fd_,offset,SEEK_SET);
+							i = read(fd_,buff,length); 
+							close(fd_);
+							return i;
+						}
+					}
+					else if((list[fd]->mode)&0x002){
+						char c[9] = "file";
 						char d[3] = "";
 						sprintf(d,"%d",list[fd]->pos);
-						strcat(c,d);	
-						int fd = open(c,O_RDONLY);
-						lseek(fd,offset,SEEK_SET);
-						return read(fd,buff,length);
+						strcat(c,d);
+						int fd_ = open(c,O_WRONLY);
+						int i = -1;
+						lseek(fd_,offset,SEEK_SET);
+						i = read(fd_,buff,length); 
+						close(fd_);
+						return i;
 					}
 					else{
-						printf("\ninvaild fd\n");
+						printf("\nnot enough right\n");
 						return -1;
 					}
 				}
 				else{
-					printf("\nnot enough right\n");
+					printf("\nwrong fd\n");
 					return -1;
 				}
 			}	
 
 			int delete_(const char* pathname){
-
+				for(int i = 0; i < 10; ++i){
+					if(curr->dir_[i] != NULL){
+						//匹配
+						if(strncmp(pathname,curr->dir_[i]->name,sizeof(pathname))==0){
+							if(curr->dir_[i]->type == 2){
+								fileNode* a = new fileNode();
+								char c[7] = "inode";
+								char d[3] = "";
+								sprintf(d,"%d",curr->dir_[i]->inode);
+								strcat(c,d);	
+								//读取inode
+								int fd = open(c,O_RDONLY);
+								read(fd,&(a->uid),sizeof(int));
+								lseek(fd,sizeof(int),SEEK_CUR);
+								read(fd,&(a->length),sizeof(int));
+								lseek(fd,sizeof(int),SEEK_CUR);
+								read(fd,&(a->mode),sizeof(short));
+								lseek(fd,sizeof(short),SEEK_CUR);
+								read(fd,&(a->pos),sizeof(int));
+								lseek(fd,sizeof(int),SEEK_CUR);
+								close(fd);
+								char g[9]= "file";
+								char h[3]="";
+								sprintf(h,"%d",a->pos);
+								strcat(g,h);
+								//删除文件
+								unlink(c);
+								unlink(g);
+								//修改目录信息
+								curr->curr--;
+								iblock[curr->dir_[i]->inode] = false;
+								fblock[a->pos] = false;
+								delete curr->dir_[i];
+								curr->dir_[i] = NULL;
+								writeDir();
+								writeBlock();
+								return 1;
+							}
+							else{
+								printf("nworng type: a file is expected\n");
+								return -1;
+							}
+						}
+					}
+				}
+				printf("\nno such file\n");
+				return -1;
 			}
 
 			int open_(const char* pathname){
@@ -533,20 +636,20 @@ namespace mysys{
 			int close_(int fd){
 				if(list[fd] != NULL){
 					int p = back_[fd];
-					char c[7] = "inode";
+					char c[8] = "inode";
 					char d[3] = "";
 					sprintf(d,"%d",p);
 					strcat(c,d);	
-					int fd = open(c,O_WRONLY);
-					read(fd,&(list[fd]->uid),sizeof(int));
-					lseek(fd,sizeof(int),SEEK_CUR);
-					read(fd,&(list[fd]->length),sizeof(int));
-					lseek(fd,sizeof(int),SEEK_CUR);
-					read(fd,&(list[fd]->mode),sizeof(short));
-					lseek(fd,sizeof(short),SEEK_CUR);
-					read(fd,&(list[fd]->pos),sizeof(int));
-					lseek(fd,sizeof(int),SEEK_CUR);
-					close(fd);
+					int fd1 = open(c,O_WRONLY);
+					write(fd1,&(list[fd]->uid),sizeof(int));
+					lseek(fd1,sizeof(int),SEEK_CUR);
+					write(fd1,&(list[fd]->length),sizeof(int));
+					lseek(fd1,sizeof(int),SEEK_CUR);
+					write(fd1,&(list[fd]->mode),sizeof(short));
+					lseek(fd1,sizeof(short),SEEK_CUR);
+					write(fd1,&(list[fd]->pos),sizeof(int));
+					lseek(fd1,sizeof(int),SEEK_CUR);
+					close(fd1);
 					delete list[fd];
 					list[fd] = NULL;
 					back_[fd] = -1;
@@ -708,21 +811,139 @@ namespace mysys{
 				}
 				return -1;
 			}
+
+			int cd_last(){
+				if(curr->parent != -1){
+					myDir* a = new myDir();
+					fileNode* b = new fileNode();
+					int p = curr->parent;	
+					char c[7] = "inode";
+					char d[3] = "";
+					sprintf(d,"%d",p);
+					strcat(c,d);	
+					int fd = open(c,O_RDONLY);
+					read(fd,&(b->uid),sizeof(int));
+					lseek(fd,sizeof(int),SEEK_CUR);
+					read(fd,&(b->length),sizeof(int));
+					lseek(fd,sizeof(int),SEEK_CUR);
+					read(fd,&(b->mode),sizeof(short));
+					lseek(fd,sizeof(short),SEEK_CUR);
+					read(fd,&(b->pos),sizeof(int));
+					lseek(fd,sizeof(int),SEEK_CUR);
+					close(fd);
+					char e[8] = "file";
+					char f[2] = "";
+					sprintf(f,"%d",b->pos);
+					strcat(e,f);
+					int fd_ = open(e,O_RDONLY);
+					read(fd_,a->name,sizeof(a->name));
+					lseek(fd_,sizeof(a->name),SEEK_CUR);
+					read(fd_,&(a->curr),sizeof(int));
+					lseek(fd_,sizeof(int),SEEK_CUR);
+					read(fd_,&(a->next),sizeof(int));
+					lseek(fd_,sizeof(int),SEEK_CUR);
+					read(fd_,&(a->parent),sizeof(int));
+					lseek(fd_,sizeof(int),SEEK_CUR);
+					//读取目录项
+					for(int i=0; i < a->curr; i++){
+						a->dir_[i] = new dirNode();
+						read(fd_,&(a->dir_[i]->inode),sizeof(int));
+						lseek(fd_,sizeof(int),SEEK_CUR);
+						read(fd_,(a->dir_[i]->name),sizeof(a->dir_[i]->name));
+						lseek(fd_,sizeof(int),SEEK_CUR);
+						read(fd_,&(a->dir_[i]->type),sizeof(int));
+						lseek(fd_,sizeof(int),SEEK_CUR);
+					}
+					close(fd_);
+					delete curr;
+					delete currINode;
+					curr = a;
+					currINode  = b;
+					currINodeNo = p;	
+					return 1;
+				}
+				else{
+					printf("\nalready top dir");
+					return -1;
+				}
+			}
+
+			int cd_root(){
+				if(currINodeNo != 0){
+					myDir* a = new myDir();
+					fileNode* b = new fileNode();
+					int p = 0;	
+					char c[7] = "inode";
+					char d[3] = "";
+					sprintf(d,"%d",p);
+					strcat(c,d);	
+					int fd = open(c,O_RDONLY);
+					read(fd,&(b->uid),sizeof(int));
+					lseek(fd,sizeof(int),SEEK_CUR);
+					read(fd,&(b->length),sizeof(int));
+					lseek(fd,sizeof(int),SEEK_CUR);
+					read(fd,&(b->mode),sizeof(short));
+					lseek(fd,sizeof(short),SEEK_CUR);
+					read(fd,&(b->pos),sizeof(int));
+					lseek(fd,sizeof(int),SEEK_CUR);
+					close(fd);
+					char e[8] = "file";
+					char f[2] = "";
+					sprintf(f,"%d",b->pos);
+					strcat(e,f);
+					int fd_ = open(e,O_RDONLY);
+					read(fd_,a->name,sizeof(a->name));
+					lseek(fd_,sizeof(a->name),SEEK_CUR);
+					read(fd_,&(a->curr),sizeof(int));
+					lseek(fd_,sizeof(int),SEEK_CUR);
+					read(fd_,&(a->next),sizeof(int));
+					lseek(fd_,sizeof(int),SEEK_CUR);
+					read(fd_,&(a->parent),sizeof(int));
+					lseek(fd_,sizeof(int),SEEK_CUR);
+					//读取目录项
+					for(int i=0; i < a->curr; i++){
+						a->dir_[i] = new dirNode();
+						read(fd_,&(a->dir_[i]->inode),sizeof(int));
+						lseek(fd_,sizeof(int),SEEK_CUR);
+						read(fd_,(a->dir_[i]->name),sizeof(a->dir_[i]->name));
+						lseek(fd_,sizeof(int),SEEK_CUR);
+						read(fd_,&(a->dir_[i]->type),sizeof(int));
+						lseek(fd_,sizeof(int),SEEK_CUR);
+					}
+					close(fd_);
+					delete curr;
+					delete currINode;
+					curr = a;
+					currINode  = b;
+					currINodeNo = p;	
+					return 1;
+				}
+				else{
+					printf("\nalready top dir");
+					return -1;
+				}
+			}
+
 			//登录
 			int login(const char* un,const char* passwd){
 				int fd = open("user",S_IRWXU);
 				char na[256];
 				char pa[256];
-				if(read(fd,na,256 * 8) != -1){
+				int size = sizeof(na);
+				if(read(fd,na,size) != -1){
+					cout<<endl<<na<<endl;
+					cout<<endl<<un<<endl;
 					int i = strcmp(un,na);
 					if(i != 0){
 						close(fd);
 						return 0;
 					}
 					else{
-						lseek(fd,256 * 8,SEEK_CUR);
-						read(fd,pa,256 * 8);
+						lseek(fd,size,SEEK_CUR);
+						read(fd,pa,size);
 						i = strcmp(passwd,pa);
+						cout<<endl<<pa<<endl;
+						cout<<endl<<passwd<<endl;
 						if(i == 0){
 							close(fd);
 							currUser = 1;
@@ -742,10 +963,15 @@ namespace mysys{
 			//注册
 			int signup(const char* na,const char* pa){
 				if(empty()){
+					char a[256];
+					char b[256];
+					strcpy(a,na);
+					strcpy(b,pa);
 					int fd = creat("user",S_IRWXU);
-					write(fd,na,256 * 8);
-					lseek(fd,256 * 8,SEEK_CUR);
-					write(fd,pa,256 * 8);
+					int size = sizeof(a);
+					write(fd,a,size);
+					lseek(fd,size,SEEK_CUR);
+					write(fd,b,size);
 					close(fd);
 				}
 			}
