@@ -307,6 +307,7 @@ namespace mysys{
 				w[10] = '\0';
 				a.fomattedMod(w);
 				printf("%s",w);
+				printf(" %d",a.uid);
 				printf("  %d",a.length);
 			}
 
@@ -926,13 +927,11 @@ namespace mysys{
 
 			//登录
 			int login(const char* un,const char* passwd){
-				int fd = open("user",S_IRWXU);
+				int fd = open("user",O_RDONLY);
 				char na[256];
 				char pa[256];
 				int size = sizeof(na);
 				if(read(fd,na,size) != -1){
-					cout<<endl<<na<<endl;
-					cout<<endl<<un<<endl;
 					int i = strcmp(un,na);
 					if(i != 0){
 						close(fd);
@@ -942,8 +941,6 @@ namespace mysys{
 						lseek(fd,size,SEEK_CUR);
 						read(fd,pa,size);
 						i = strcmp(passwd,pa);
-						cout<<endl<<pa<<endl;
-						cout<<endl<<passwd<<endl;
 						if(i == 0){
 							close(fd);
 							currUser = 1;
