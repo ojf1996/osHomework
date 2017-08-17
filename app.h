@@ -509,7 +509,7 @@ namespace mysys{
 							char d[3] = "";
 							sprintf(d,"%d",list[fd]->pos);
 							strcat(c,d);
-							int fd_ = open(c,O_WRONLY);
+							int fd_ = open(c,O_RDONLY);
 							int i = -1;
 							lseek(fd_,offset,SEEK_SET);
 							i = read(fd_,buff,length); 
@@ -522,7 +522,7 @@ namespace mysys{
 						char d[3] = "";
 						sprintf(d,"%d",list[fd]->pos);
 						strcat(c,d);
-						int fd_ = open(c,O_WRONLY);
+						int fd_ = open(c,O_RDONLY);
 						int i = -1;
 						lseek(fd_,offset,SEEK_SET);
 						i = read(fd_,buff,length); 
@@ -972,6 +972,189 @@ namespace mysys{
 					close(fd);
 				}
 			}
+	};
+	#endif
+
+	#ifndef UI_H
+	#define UI_H
+	class ui{
+		private:
+			myFileSys a;
+		public:
+			ui(){
+			}
+			~ui(){
+			}
+
+			void _dir(){
+				a.dir_();
+			}
+
+			void _create(){
+					printf("\nint create(const char* pathname,int mode);");
+					printf("\nreturn the file descriptor of the created file");
+					printf("mode means the access bit:\n6:wr-\n4:w--\n2:-r-\n0:---");
+					printf("\nplease input pathname,mode\n");
+					char na[256];
+					int mode;
+					if(scanf("%s%d",na,&mode)==2){
+						printf("\n return %d",a.create_(na,mode));
+					}		
+			}
+
+			void _write(){
+				printf("\nint write(int fd,char * buff,int offset,int length);");
+				printf("\nreturn certain length of data writen");
+				printf("\nplease input fd,offset,length\n");
+				int fd,offset,length;
+				char n[256];
+				if(scanf("%d%s%d%d",&fd,n,&offset,&length)==3){
+					printf("\n return %d",a.write_(fd,n,offset,length));
+				}		
+			}
+
+			void _read(){
+				printf("\nint read(int fd,char * buff,int offset,int length);");
+				printf("\nreturn certain length of data writen");
+				printf("\nplease input fd,offset,length\n");
+				int fd,offset,length;
+				char n[256];
+				if(scanf("%d%d%d",&fd,&offset,&length)==3){
+					printf("\n return %d",a.read_(fd,n,offset,length));
+					strcat(n,"\0");
+					printf("\nreads %s",n);
+				}	
+			}
+
+			void _delete(){
+				printf("\ndelete(const char* pathname);");
+				printf("\ndelete file in current dir\n");
+				char n[256];
+				if(scanf("%s",n)==1){
+					printf("\nresult %d", a.delete_(n));
+				}
+			}	
+
+			void _open(){
+				printf("\nopen(const char* pathname);");
+				printf("\nopen file in current dir\n");
+				char n[256];
+				if(scanf("%s",n)==1){
+					printf("\nfd is %d", a.open_(n));
+				}
+			}
+
+			void _close(){
+				printf("\nclose(int fd);");
+				printf("\nclose fd namely\n");
+				int b;
+				if(scanf("%d",&b)==1){
+					printf("\nfd is %d", a.close_(b));
+				}
+			} 
+
+			void _cd(){
+				int t;
+				printf("\ncd has 3 type:\n1:cd \n2:cd ..\n3:cd dirname\n");
+				if(scanf("%d",&t)==1){
+					switch(t){
+						case 1:
+							a.cd_root();
+							break;
+						case 2:
+							a.cd_last();
+							break;
+						case 3:
+							char d[256];
+							if(scanf("%s",d)==1){
+								a.cd_(d);
+							}
+							break;
+					}
+				}
+			}
+
+			void _login(){
+				printf("\nplease input username,password\n");
+				char n[256];
+				char p[256];
+				if(scanf("%s%s",n,p)==2){
+					a.login(n,p);
+				}
+			}
+
+			void _signup(){
+				printf("\nplease input username,password\n");
+				char n[256];
+				char p[256];
+				if(scanf("%s%s",n,p)==2){
+					a.signup(n,p);
+				}
+			}
+
+			void _mkdir(){
+				printf("\nmkdir(const cha* pathname)");
+				printf("\ncreate dir in current dir\n");
+				char n[256];
+				if(scanf("%s",n)==1){
+					a.mkdir_(n);
+				}
+			}
+
+			void main_(){
+				int CMD =-1;
+				while(true){
+					printf("\nplease input the command you want:");
+					printf("\n1:login");
+					printf("\n2:dir");
+					printf("\n3:mkdir");
+					printf("\n4:create");
+					printf("\n5:open");
+					printf("\n6:read");
+					printf("\n7:write");
+					printf("\n8:close");
+					printf("\n9:delete");
+					printf("\n10:cd");
+					printf("\nothers:quit\n");
+					cin>>CMD;
+					switch(CMD){
+						case 1:
+							_login();
+							break;
+						case 2:
+							_dir();
+							break;
+						case 3:
+							_mkdir();
+							break;
+						case 4:
+							_create();
+							break;
+						case 5:
+							_open();
+							break;
+						case 6:
+							_read();
+							break;
+						case 7:
+							_write();
+							break;
+						case 8:
+							_close();
+							break;
+						case 9:
+							_delete();
+							break;
+						case 10:
+							_cd();
+							break;
+						default:
+							return;
+					}
+					cin.clear();
+				}
+			}
+
 	};
 	#endif
 };
